@@ -57,14 +57,15 @@ class _MandleViewState extends State<MandleView> {
         bitmapWidth: widget.width,
         bitMapHeight: widget.height);
 
-    ImmutableBuffer.fromUint8List(imageBuffer!.buffer.asUint8List())
-        .then((value) => ImageDescriptor.raw(value,
-                width: widget.width,
-                height: widget.height,
-                pixelFormat: PixelFormat.bgra8888)
-            .instantiateCodec()
-            .then((codec) => codec.getNextFrame()))
-        .then((frame) => setState(() => frameToDisplay = frame));
+    Future.delayed(Duration(seconds: 1)).then((value) =>
+        ImmutableBuffer.fromUint8List(imageBuffer!.buffer.asUint8List())
+            .then((value) => ImageDescriptor.raw(value,
+                    width: widget.width,
+                    height: widget.height,
+                    pixelFormat: PixelFormat.bgra8888)
+                .instantiateCodec()
+                .then((codec) => codec.getNextFrame()))
+            .then((frame) => setState(() => frameToDisplay = frame)));
   }
 
   @override
