@@ -24,7 +24,17 @@ class MyApp extends StatelessWidget {
           appBar: AppBar(
             title: const Text('Mandel Demo'),
           ),
-          body: const MandelExplorer(),
+          body: FutureBuilder(
+              future: renderManager.initIsolates(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.done) {
+                  return const MandelExplorer();
+                } else {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
+              }),
         )
         //   onPressed: _incrementCounter,
         //   tooltip: 'Increment',
