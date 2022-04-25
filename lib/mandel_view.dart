@@ -1,9 +1,7 @@
-import 'dart:typed_data';
-import 'dart:ui';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-
-import 'mandelbrot.dart';
+import 'package:flutter_mandel/render_manager.dart';
 
 class MandleView extends StatefulWidget {
   final int width;
@@ -23,13 +21,10 @@ class MandleView extends StatefulWidget {
 }
 
 class _MandleViewState extends State<MandleView> {
-  Uint32List? imageBuffer;
-  final mandel = Mandelbrot();
-  FrameInfo? frameToDisplay;
+  ui.Image? imageToDisplay;
 
   @override
   void initState() {
-    imageBuffer = Uint32List(widget.width * widget.height);
     renderMandel();
 
     super.initState();
@@ -38,46 +33,25 @@ class _MandleViewState extends State<MandleView> {
   @override
   void didUpdateWidget(covariant MandleView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.width != oldWidget.width || widget.height != oldWidget.height) {
-      /// Window size changed so we have to adapt our image buffer size
-      imageBuffer = Uint32List(widget.width * widget.height);
-    }
     renderMandel();
   }
 
   void renderMandel() {
-    final double aspect = widget.width / widget.height;
-
-    mandel.renderData(
-        data: imageBuffer!,
-        xMin: widget.upperLeftCoord.dx,
-        xMax: widget.upperLeftCoord.dx + widget.renderWidth,
-        yMin: widget.upperLeftCoord.dy,
-        yMax: widget.upperLeftCoord.dy + widget.renderWidth / aspect,
-        bitmapWidth: widget.width,
-        bitMapHeight: widget.height);
-
-    Future.delayed(Duration(seconds: 1)).then((value) =>
-        ImmutableBuffer.fromUint8List(imageBuffer!.buffer.asUint8List())
-            .then((value) => ImageDescriptor.raw(value,
-                    width: widget.width,
-                    height: widget.height,
-                    pixelFormat: PixelFormat.bgra8888)
-                .instantiateCodec()
-                .then((codec) => codec.getNextFrame()))
-            .then((frame) => setState(() => frameToDisplay = frame)));
+    renderManager
+        .renderTile(
+            width: widget.width,
+            height: widget.height,
+            upperLeftCoord: widget.upperLeftCoord,
+            renderWidth: widget.renderWidth)
+        .then((image) => setState(() => imageToDisplay = image));
   }
 
   @override
   Widget build(BuildContext context) {
-    if (frameToDisplay != null) {
-      return RawImage(
-        image: frameToDisplay!.image,
-      );
+    if (imageToDisplay != null) {
+      return RawImage(image: imageToDisplay);
     } else {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const SizedBox();
     }
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_mandel/render_manager.dart';
 
 import 'mandel_view.dart';
 
@@ -56,6 +57,8 @@ class _MandelExplorerState extends State<MandelExplorer> {
         final tilesY = (constraints.maxHeight / tileSize).ceil();
         final double renderTileSize = renderWidth / tilesX;
 
+        renderManager.numberOfTiles = tilesX * tilesY;
+
         return Stack(
           children: [
             for (int xTiles = 0; xTiles < tilesX; xTiles++)
@@ -71,6 +74,17 @@ class _MandelExplorerState extends State<MandelExplorer> {
                     renderWidth: renderTileSize,
                   ),
                 ),
+            ValueListenableBuilder<bool>(
+                valueListenable: renderManager.busy,
+                builder: (context, busy, widget) {
+                  if (busy) {
+                    return const Center(
+                      child: CircularProgressIndicator(),
+                    );
+                  } else {
+                    return const Center(child: SizedBox());
+                  }
+                }),
             Positioned(
                 right: 60,
                 bottom: 100,
