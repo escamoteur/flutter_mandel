@@ -1,12 +1,9 @@
 import 'dart:async';
 import 'dart:isolate';
-import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_mandel/isolates.dart';
-
-import 'mandelbrot.dart';
 
 RenderManager renderManager = RenderManager();
 
@@ -36,7 +33,9 @@ class RenderManager {
 
       busy.value = (--numberOfTiles > 0);
 
-      _requestedTilesCompleters[response.requestId]?.complete(frame.image);
+      _requestedTilesCompleters
+          .remove(response.requestId)
+          ?.complete(frame.image);
     });
   }
 
@@ -53,7 +52,7 @@ class RenderManager {
   }) async {
     /// schedule an isolate
     renderIsolate.toIsolate.send(TileRequest(
-      id: requestCount++,
+      id: requestCount,
       width: width,
       height: height,
       upperLeftCoord: upperLeftCoord,
