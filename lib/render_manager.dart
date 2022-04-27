@@ -1,22 +1,31 @@
 import 'dart:async';
 import 'dart:isolate';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_mandel/isolates.dart';
 
+import 'mandelbrot.dart';
+
 RenderManager renderManager = RenderManager();
 
 class RenderManager {
-  late IsolateEntry renderIsolate;
+  final watch = Stopwatch();
+  late IsolateEntry newIsolate;
   int requestCount = 0;
   late int numberOfTiles;
+  final isolateList = <IsolateEntry>[];
+  final availableIsolates = <IsolateEntry>[];
+  int isolatesInUse = 0;
+  final waitingTiles = <TileRequest>[];
 
   final Map<int, Completer<Image>> _requestedTilesCompleters = {};
   // this port is shared by all isolates
   final tileResultPort = ReceivePort();
 
   ValueNotifier<bool> busy = ValueNotifier(false);
+  ValueNotifier<String> renderTimeAsString = ValueNotifier(' ');
 
   RenderManager() {
     tileResultPort.listen((message) async {
@@ -31,17 +40,47 @@ class RenderManager {
               .instantiateCodec()
               .then((codec) => codec.getNextFrame()));
 
-      busy.value = (--numberOfTiles > 0);
-
+      /// transfer image to the waiting tile
       _requestedTilesCompleters
-          .remove(response.requestId)
-          ?.complete(frame.image);
+          .remove(response.requestId)!
+          .complete(frame.image);
+
+      /// when we receive a response at this point it means one of our isolates
+      /// just got idle
+      if (waitingTiles.isNotEmpty) {
+        isolateList[response.isolateId]
+            .toIsolate
+            .send(waitingTiles.removeLast());
+      } else {
+        availableIsolates.add(isolateList[response.isolateId]);
+
+        if (availableIsolates.length == isolateList.length) // no isolate in use
+        {
+          busy.value = false;
+          renderTimeAsString.value = '${watch.elapsedMilliseconds}ms';
+        }
+      }
     });
   }
 
-  Future<void> initIsolates() async {
-    renderIsolate = await IsolateEntry.create(
-        IsolateInitData(isolateId: 1, resultPort: tileResultPort.sendPort));
+  void emptyQeue() {
+    waitingTiles.clear();
+  }
+
+  Future<void> increaseIsolateCount() async {
+    newIsolate = await IsolateEntry.create(IsolateInitData(
+        isolateId: isolateList.length, resultPort: tileResultPort.sendPort));
+    isolateList.add(newIsolate);
+    availableIsolates.add(newIsolate);
+  }
+
+  void decreaseIsolateCount() {
+    if (isolatesInUse == 0) {
+      //only if all isolates are idle
+      if (isolateList.isNotEmpty) {
+        isolateList.removeLast().dispose();
+      }
+    }
   }
 
   Future<Image> renderTile({
@@ -49,18 +88,58 @@ class RenderManager {
     required int height,
     required Offset upperLeftCoord,
     required double renderWidth,
-  }) async {
-    /// schedule an isolate
-    renderIsolate.toIsolate.send(TileRequest(
-      id: requestCount,
-      width: width,
-      height: height,
-      upperLeftCoord: upperLeftCoord,
-      renderWidth: renderWidth,
-    ));
+  }) {
+    if (isolateList.isNotEmpty) {
+      /// schedule an isolate
+      final tileRequest = TileRequest(
+        id: requestCount,
+        width: width,
+        height: height,
+        upperLeftCoord: upperLeftCoord,
+        renderWidth: renderWidth,
+      );
+      if (availableIsolates.isNotEmpty) {
+        final nextIsolate = availableIsolates.removeLast();
 
-    final completer = Completer<Image>();
-    _requestedTilesCompleters[requestCount++] = completer;
-    return completer.future;
+        nextIsolate.toIsolate.send(tileRequest);
+      } else {
+        waitingTiles.add(tileRequest);
+      }
+      final completer = Completer<Image>();
+      _requestedTilesCompleters[requestCount++] = completer;
+      return completer.future;
+    } else {
+      /// No rendereing isolate
+      final mandel = Mandelbrot();
+
+      final double aspect = width / height;
+
+      final imageBuffer = Uint32List(width * height);
+
+      mandel.renderData(
+          data: imageBuffer,
+          xMin: upperLeftCoord.dx,
+          xMax: upperLeftCoord.dx + renderWidth,
+          yMin: upperLeftCoord.dy,
+          yMax: upperLeftCoord.dy + renderWidth / aspect,
+          bitmapWidth: width,
+          bitMapHeight: height);
+
+      return ImmutableBuffer.fromUint8List(imageBuffer.buffer.asUint8List())
+          .then(
+        (value) => ImageDescriptor.raw(value,
+                width: width, height: height, pixelFormat: PixelFormat.bgra8888)
+            .instantiateCodec()
+            .then(
+              (codec) => codec.getNextFrame().then((frame) {
+                if (--numberOfTiles == 0) {
+                  busy.value = false;
+                  renderTimeAsString.value = '${watch.elapsedMilliseconds}ms';
+                }
+                return frame.image;
+              }),
+            ),
+      );
+    }
   }
 }

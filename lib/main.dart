@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_mandel/render_manager.dart';
 
@@ -22,25 +20,61 @@ class MyApp extends StatelessWidget {
         ),
         home: Scaffold(
           appBar: AppBar(
-            title: const Text('Mandel Demo'),
+            title: Row(
+              children: const [
+                Text('Mandel Demo'),
+                Spacer(),
+                Expanded(child: IsolateControl())
+              ],
+            ),
           ),
-          body: FutureBuilder(
-              future: renderManager.initIsolates(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.done) {
-                  return const MandelExplorer();
-                } else {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
-                }
-              }),
+          body: const MandelExplorer(),
         )
         //   onPressed: _incrementCounter,
         //   tooltip: 'Increment',
         //   child: const Icon(Icons.add),
         // ), // This trailing comma makes auto-formatting nicer for build methods.
         );
+  }
+}
+
+class IsolateControl extends StatefulWidget {
+  const IsolateControl({
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  State<IsolateControl> createState() => _IsolateControlState();
+}
+
+class _IsolateControlState extends State<IsolateControl> {
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Spacer(),
+        ValueListenableBuilder<String>(
+            valueListenable: renderManager.renderTimeAsString,
+            builder: (contex, time, _) {
+              return Text('render time: $time');
+            }),
+        const Spacer(),
+        Text(
+            'number of rendering Isolates: ${renderManager.isolateList.length}'),
+        const SizedBox(
+          width: 16,
+        ),
+        IconButton(
+            onPressed: () async {
+              await renderManager.increaseIsolateCount();
+              setState(() {});
+            },
+            icon: const Icon(Icons.add)),
+        IconButton(
+            onPressed: () => setState((renderManager.decreaseIsolateCount)),
+            icon: const Icon(Icons.remove))
+      ],
+    );
   }
 }
 
@@ -63,10 +97,23 @@ class _MandelExplorerState extends State<MandelExplorer> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
+        /// As a call to this function signals a new update of the screen
+        /// I want to activate the Progressindicator
+        Future.microtask(() async => renderManager.busy.value = true);
+        renderManager.watch
+          ..reset()
+          ..start();
+
         final tilesX = (constraints.maxWidth / tileSize).ceil();
         final tilesY = (constraints.maxHeight / tileSize).ceil();
         final double renderTileSize = renderWidth / tilesX;
 
+        ///if anything triggers a rebuild of the whole widget
+        /// we clear any still not rendered tiles
+        renderManager.emptyQeue();
+
+        /// to know when the build is complete when I don't use the isolates I need to know how many
+        /// tiles have to be rendered
         renderManager.numberOfTiles = tilesX * tilesY;
 
         return Stack(
