@@ -36,10 +36,15 @@ class TileResponse {
 }
 
 class IsolateInitData {
+  /// this port is needed to wire up the communication with the isolate
+  final SendPort initSendPort;
+
+  /// This is the port that is shared by all isolates
   final SendPort resultPort;
   final int isolateId;
 
   IsolateInitData({
+    required this.initSendPort,
     required this.isolateId,
     required this.resultPort,
   });
@@ -55,13 +60,21 @@ class IsolateEntry {
     required this.toIsolate,
   });
 
-  static Future<IsolateEntry> create(IsolateInitData initData) async {
+  static Future<IsolateEntry> create(
+      {required int isolateId, required SendPort resultPort}) async {
     ReceivePort initPort = ReceivePort();
 
-    final spawnedIsolate =
-        await Isolate.spawn(isolateHandler, initPort.sendPort);
+    final spawnedIsolate = await Isolate.spawn(
+      isolateHandler,
+      IsolateInitData(
+          initSendPort: initPort.sendPort,
+          isolateId: isolateId,
+          resultPort: resultPort),
+    );
+
+    /// Wait to receive the communication port of the just created isolate back.
     final sendPort = await initPort.first as SendPort;
-    sendPort.send(initData);
+
     return IsolateEntry(isolate: spawnedIsolate, toIsolate: sendPort);
   }
 
@@ -69,46 +82,44 @@ class IsolateEntry {
     isolate.kill();
   }
 
-  static void isolateHandler(sendPort) {
+  static void isolateHandler(isolateIniData) {
     /// this here is the code that runs inside the isolate
-    final SendPort initSendPort = sendPort;
+    final IsolateInitData initData = isolateIniData;
+    final SendPort initSendPort = initData.initSendPort;
+
+    /// Port we pass back to the mainisolate to have bidirection communication
     final ReceivePort fromMainIsolate = ReceivePort();
-    late final SendPort resultPort;
-    late final int isolateId;
+    late final SendPort resultPort = initData.resultPort;
+    late final int isolateId = initData.isolateId;
 
     initSendPort.send(fromMainIsolate.sendPort);
 
     fromMainIsolate.listen((message) {
-      if (message is IsolateInitData) {
-        resultPort = message.resultPort;
-        isolateId = message.isolateId;
-      } else {
-        final request = message as TileRequest;
-        final mandel = Mandelbrot();
+      final request = message as TileRequest;
+      final mandel = Mandelbrot();
 
-        final double aspect = request.width / request.height;
+      final double aspect = request.width / request.height;
 
-        final imageBuffer = Uint32List(request.width * request.height);
+      final imageBuffer = Uint32List(request.width * request.height);
 
-        mandel.renderData(
-            data: imageBuffer,
-            xMin: request.upperLeftCoord.dx,
-            xMax: request.upperLeftCoord.dx + request.renderWidth,
-            yMin: request.upperLeftCoord.dy,
-            yMax: request.upperLeftCoord.dy + request.renderWidth / aspect,
-            bitmapWidth: request.width,
-            bitMapHeight: request.height);
+      mandel.renderData(
+          data: imageBuffer,
+          xMin: request.upperLeftCoord.dx,
+          xMax: request.upperLeftCoord.dx + request.renderWidth,
+          yMin: request.upperLeftCoord.dy,
+          yMax: request.upperLeftCoord.dy + request.renderWidth / aspect,
+          bitmapWidth: request.width,
+          bitMapHeight: request.height);
 
-        resultPort.send(
-          TileResponse(
-            isolateId: isolateId,
-            requestId: request.id,
-            width: request.width,
-            height: request.height,
-            data: TransferableTypedData.fromList([imageBuffer]),
-          ),
-        );
-      }
+      resultPort.send(
+        TileResponse(
+          isolateId: isolateId,
+          requestId: request.id,
+          width: request.width,
+          height: request.height,
+          data: TransferableTypedData.fromList([imageBuffer]),
+        ),
+      );
     });
   }
 }

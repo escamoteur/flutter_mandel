@@ -70,8 +70,10 @@ class RenderManager {
   }
 
   Future<void> increaseIsolateCount() async {
-    final newIsolate = await IsolateEntry.create(IsolateInitData(
-        isolateId: isolateList.length, resultPort: tileResultPort.sendPort));
+    final newIsolate = await IsolateEntry.create(
+      isolateId: isolateList.length,
+      resultPort: tileResultPort.sendPort,
+    );
     isolateList.add(newIsolate);
     availableIsolates.add(newIsolate);
   }
