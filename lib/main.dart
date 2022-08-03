@@ -98,7 +98,7 @@ class _MandelExplorerState extends State<MandelExplorer> {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         /// As a call to this function signals a new update of the screen
-        /// I want to activate the Progressindicator
+        /// we restart out stopwatch
         Future.microtask(() async => renderManager.busy.value = true);
         renderManager.watch
           ..reset()

@@ -8,11 +8,12 @@ import 'package:flutter_mandel/isolates.dart';
 
 import 'mandelbrot.dart';
 
+/// To keep things simple for this demo we use a simple global variable
+/// In a real app you would access such a class via a service loactor
 RenderManager renderManager = RenderManager();
 
 class RenderManager {
   final watch = Stopwatch();
-  late IsolateEntry newIsolate;
   int requestCount = 0;
   late int numberOfTiles;
   final isolateList = <IsolateEntry>[];
@@ -46,12 +47,13 @@ class RenderManager {
           .complete(frame.image);
 
       /// when we receive a response at this point it means one of our isolates
-      /// just got idle
+      /// just got idle so we can directly use it to render the next waiting tile
       if (waitingTiles.isNotEmpty) {
         isolateList[response.isolateId]
             .toIsolate
             .send(waitingTiles.removeLast());
       } else {
+        // No tiles are currently waiting, so we put the idle isolate back in the available list
         availableIsolates.add(isolateList[response.isolateId]);
 
         if (availableIsolates.length == isolateList.length) // no isolate in use
@@ -68,7 +70,7 @@ class RenderManager {
   }
 
   Future<void> increaseIsolateCount() async {
-    newIsolate = await IsolateEntry.create(IsolateInitData(
+    final newIsolate = await IsolateEntry.create(IsolateInitData(
         isolateId: isolateList.length, resultPort: tileResultPort.sendPort));
     isolateList.add(newIsolate);
     availableIsolates.add(newIsolate);
