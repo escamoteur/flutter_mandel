@@ -53,7 +53,8 @@ class RenderManager {
             .toIsolate
             .send(waitingTiles.removeLast());
       } else {
-        // No tiles are currently waiting, so we put the idle isolate back in the available list
+        /// No tiles are currently waiting, so we put the idle isolate back
+        ///  in the available list
         availableIsolates.add(isolateList[response.isolateId]);
 
         if (availableIsolates.length == isolateList.length) // no isolate in use
